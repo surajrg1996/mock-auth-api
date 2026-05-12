@@ -465,31 +465,41 @@ let secretKey;
 })();
 
 // ========================================
-// JWE LOGIN
+// JWE LOGIN USING BASIC AUTH
 // ========================================
 
 app.post(
   "/jwe/login",
   async (req, res) => {
 
+    const credentials =
+      basicAuth(req);
+
+    if (!credentials) {
+
+      return res.status(401).json({
+        error:
+          "Authorization header missing"
+      });
+
+    }
+
     const {
-      username,
-      password
-    } = req.body;
+      name,
+      pass
+    } = credentials;
 
     const user = users.find(
       u =>
-        u.username ===
-          username &&
-        u.password ===
-          password
+        u.username === name &&
+        u.password === pass
     );
 
     if (!user) {
 
       return res.status(401).json({
         error:
-          "Invalid credentials"
+          "Invalid username/password"
       });
 
     }
