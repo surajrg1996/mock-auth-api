@@ -535,7 +535,7 @@ app.post(
         .encrypt(secretKey);
 
     return res.json({
-      encrypted_token: jwe
+      authToken: jwe
     });
 
   }
