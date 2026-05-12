@@ -238,6 +238,10 @@ app.post("/oauth/token", (req, res) => {
     scope
   } = req.body;
 
+  // ======================================
+  // CLIENT VALIDATION
+  // ======================================
+
   if (
     client_id !== "mock_client" ||
     client_secret !== "mock_secret"
@@ -465,34 +469,32 @@ let secretKey;
 })();
 
 // ========================================
-// JWE LOGIN USING BASIC AUTH
+// JWE LOGIN
 // ========================================
 
 app.post(
   "/jwe/login",
   async (req, res) => {
 
-    const credentials =
-      basicAuth(req);
+    const username =
+      req.body.username;
 
-    if (!credentials) {
+    const password =
+      req.body.password;
 
-      return res.status(401).json({
+    if (!username || !password) {
+
+      return res.status(400).json({
         error:
-          "Authorization header missing"
+          "username and password required"
       });
 
     }
 
-    const {
-      name,
-      pass
-    } = credentials;
-
     const user = users.find(
       u =>
-        u.username === name &&
-        u.password === pass
+        u.username === username &&
+        u.password === password
     );
 
     if (!user) {
@@ -509,11 +511,15 @@ app.post(
         username:
           user.username,
 
-        role: user.role,
+        role:
+          user.role,
 
         secure: true,
 
-        time: Date.now()
+        auth_type: "JWE",
+
+        time:
+          Date.now()
       });
 
     const jwe =
