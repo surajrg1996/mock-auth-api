@@ -34,235 +34,7 @@ const users = [
 
 
 // ========================================
-// BASIC AUTH LOGIN
-// ========================================
-
-app.post("/basic/login", (req, res) => {
-
-  const credentials = basicAuth(req);
-
-  if (!credentials) {
-    return res.status(401).json({
-      message: "Authorization header missing"
-    });
-  }
-
-  const user = users.find(
-    u =>
-      u.username === credentials.name &&
-      u.password === credentials.pass
-  );
-
-  if (!user) {
-    return res.status(401).json({
-      message: "Invalid username/password"
-    });
-  }
-
-  return res.json({
-    status: "success",
-    message: "Basic Auth Login Successful",
-    user: {
-      username: user.username,
-      role: user.role
-    }
-  });
-
-});
-
-
-// ========================================
-// OAUTH TOKEN API
-// ========================================
-
-app.post("/oauth/token", (req, res) => {
-
-  const {
-    client_id,
-    client_secret,
-    username,
-    password,
-    grant_type
-  } = req.body;
-
-  if (
-    client_id !== "mock_client" ||
-    client_secret !== "mock_secret"
-  ) {
-    return res.status(401).json({
-      error: "Invalid client"
-    });
-  }
-
-  if (grant_type !== "password") {
-    return res.status(400).json({
-      error: "Unsupported grant_type"
-    });
-  }
-
-  const user = users.find(
-    u =>
-      u.username === username &&
-      u.password === password
-  );
-
-  if (!user) {
-    return res.status(401).json({
-      error: "Invalid credentials"
-    });
-  }
-
-  const accessToken = jwt.sign(
-    {
-      username: user.username,
-      role: user.role
-    },
-    JWT_SECRET,
-    {
-      expiresIn: "1h"
-    }
-  );
-
-  return res.json({
-    access_token: accessToken,
-    token_type: "Bearer",
-    expires_in: 3600
-  });
-
-});
-
-
-// ========================================
-// OAUTH PROTECTED API
-// ========================================
-
-app.get("/oauth/profile", (req, res) => {
-
-  const authHeader = req.headers.authorization;
-
-  if (!authHeader) {
-    return res.status(401).json({
-      error: "Token missing"
-    });
-  }
-
-  const token = authHeader.split(" ")[1];
-
-  try {
-
-    const decoded = jwt.verify(token, JWT_SECRET);
-
-    return res.json({
-      message: "Protected Data",
-      user: decoded
-    });
-
-  } catch (err) {
-
-    return res.status(401).json({
-      error: "Invalid or expired token"
-    });
-
-  }
-
-});
-
-
-// ========================================
-// JWE LOGIN
-// ========================================
-
-let secretKey;
-
-(async () => {
-
-  secretKey = await generateSecret("A256GCM");
-
-})();
-
-app.post("/jwe/login", async (req, res) => {
-
-  const { username, password } = req.body;
-
-  const user = users.find(
-    u =>
-      u.username === username &&
-      u.password === password
-  );
-
-  if (!user) {
-    return res.status(401).json({
-      error: "Invalid credentials"
-    });
-  }
-
-  const payload = JSON.stringify({
-    username: user.username,
-    role: user.role,
-    time: Date.now()
-  });
-
-  const jwe = await new CompactEncrypt(
-    new TextEncoder().encode(payload)
-  )
-    .setProtectedHeader({
-      alg: "dir",
-      enc: "A256GCM"
-    })
-    .encrypt(secretKey);
-
-  return res.json({
-    encrypted_token: jwe
-  });
-
-});
-
-
-// ========================================
-// JWE PROTECTED API
-// ========================================
-
-app.get("/jwe/profile", async (req, res) => {
-
-  const authHeader = req.headers.authorization;
-
-  if (!authHeader) {
-    return res.status(401).json({
-      error: "Token missing"
-    });
-  }
-
-  try {
-
-    const token = authHeader.split(" ")[1];
-
-    const { plaintext } = await compactDecrypt(
-      token,
-      secretKey
-    );
-
-    const decoded = JSON.parse(
-      new TextDecoder().decode(plaintext)
-    );
-
-    return res.json({
-      message: "JWE Protected API Success",
-      user: decoded
-    });
-
-  } catch (err) {
-
-    return res.status(401).json({
-      error: "Invalid encrypted token"
-    });
-
-  }
-
-});
-
-
-// ========================================
-// HEALTH API
+// HEALTH
 // ========================================
 
 app.get("/health", (req, res) => {
@@ -275,11 +47,197 @@ app.get("/health", (req, res) => {
 
 
 // ========================================
+// OAUTH TOKEN API
+// ========================================
+
+app.post("/oauth/token", (req, res) => {
+
+  let client_id;
+  let client_secret;
+
+  // ======================================
+  // BASIC AUTH METHOD
+  // ======================================
+
+  const credentials = basicAuth(req);
+
+  if (credentials) {
+
+    client_id = credentials.name;
+    client_secret = credentials.pass;
+
+  } else {
+
+    // ======================================
+    // BODY AUTH METHOD
+    // ======================================
+
+    client_id = req.body.client_id;
+    client_secret = req.body.client_secret;
+
+  }
+
+  const {
+    username,
+    password,
+    grant_type,
+    audience,
+    scope
+  } = req.body;
+
+  // ======================================
+  // CLIENT VALIDATION
+  // ======================================
+
+  if (
+    client_id !== "mock_client" ||
+    client_secret !== "mock_secret"
+  ) {
+
+    return res.status(401).json({
+      error: "invalid_client",
+      error_description:
+        "Invalid client credentials"
+    });
+
+  }
+
+  // ======================================
+  // PASSWORD GRANT
+  // ======================================
+
+  if (grant_type === "password") {
+
+    const user = users.find(
+      u =>
+        u.username === username &&
+        u.password === password
+    );
+
+    if (!user) {
+
+      return res.status(401).json({
+        error: "invalid_grant",
+        error_description:
+          "Invalid username/password"
+      });
+
+    }
+
+    const accessToken = jwt.sign(
+      {
+        username: user.username,
+        role: user.role,
+        audience: audience || "default-api",
+        scope: scope || "read write"
+      },
+      JWT_SECRET,
+      {
+        expiresIn: "1h"
+      }
+    );
+
+    return res.json({
+      access_token: accessToken,
+      token_type: "Bearer",
+      expires_in: 3600,
+      scope: scope || "read write"
+    });
+
+  }
+
+  // ======================================
+  // CLIENT CREDENTIALS GRANT
+  // ======================================
+
+  if (
+    grant_type === "client_credentials"
+  ) {
+
+    const accessToken = jwt.sign(
+      {
+        client_id: client_id,
+        role: "SYSTEM",
+        audience: audience || "system-api",
+        scope: scope || "system"
+      },
+      JWT_SECRET,
+      {
+        expiresIn: "1h"
+      }
+    );
+
+    return res.json({
+      access_token: accessToken,
+      token_type: "Bearer",
+      expires_in: 3600,
+      scope: scope || "system"
+    });
+
+  }
+
+  return res.status(400).json({
+    error: "unsupported_grant_type"
+  });
+
+});
+
+
+// ========================================
+// OAUTH PROFILE API
+// ========================================
+
+app.post("/oauth/profile", (req, res) => {
+
+  const authHeader =
+    req.headers.authorization;
+
+  if (!authHeader) {
+
+    return res.status(401).json({
+      error: "Token missing"
+    });
+
+  }
+
+  const token = authHeader.split(" ")[1];
+
+  try {
+
+    const decoded = jwt.verify(
+      token,
+      JWT_SECRET
+    );
+
+    return res.json({
+      message:
+        "OAuth Protected API Success",
+      user: decoded,
+      headers: {
+        authorization: authHeader
+      }
+    });
+
+  } catch (err) {
+
+    return res.status(401).json({
+      error:
+        "Invalid or expired token"
+    });
+
+  }
+
+});
+
+
+// ========================================
 // START SERVER
 // ========================================
 
 app.listen(PORT, () => {
 
-  console.log(`Server running on port ${PORT}`);
+  console.log(
+    `Server running on port ${PORT}`
+  );
 
 });
