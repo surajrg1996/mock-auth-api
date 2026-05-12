@@ -217,29 +217,9 @@ app.post(
 
 app.post("/oauth/token", (req, res) => {
 
-  let client_id;
-  let client_secret;
-
-  const credentials =
-    basicAuth(req);
-
-  if (credentials) {
-
-    client_id = credentials.name;
-    client_secret =
-      credentials.pass;
-
-  } else {
-
-    client_id =
-      req.body.client_id;
-
-    client_secret =
-      req.body.client_secret;
-
-  }
-
   const {
+    client_id,
+    client_secret,
     username,
     password,
     grant_type,
@@ -247,131 +227,107 @@ app.post("/oauth/token", (req, res) => {
     scope
   } = req.body;
 
+  // ======================================
+  // CLIENT VALIDATION
+  // ======================================
+
   if (
-    client_id !==
-      "mock_client" ||
-    client_secret !==
-      "mock_secret"
+    client_id !== "mock_client" ||
+    client_secret !== "mock_secret"
   ) {
 
     return res.status(401).json({
-      error: "invalid_client"
+      error: "invalid_client",
+      error_description:
+        "Invalid client credentials"
     });
 
   }
 
+  // ======================================
   // PASSWORD GRANT
+  // ======================================
 
   if (grant_type === "password") {
 
     const user = users.find(
       u =>
-        u.username ===
-          username &&
+        u.username === username &&
         u.password === password
     );
 
     if (!user) {
 
       return res.status(401).json({
-        error: "invalid_grant"
+        error: "invalid_grant",
+        error_description:
+          "Invalid username/password"
       });
 
     }
 
-    const accessToken =
-      jwt.sign(
-        {
-          username:
-            user.username,
-
-          role: user.role,
-
-          audience:
-            audience ||
-            "default-api",
-
-          scope:
-            scope ||
-            "read write",
-
-          auth_type:
-            "password"
-        },
-        JWT_SECRET,
-        {
-          expiresIn: "1h"
-        }
-      );
+    const accessToken = jwt.sign(
+      {
+        username: user.username,
+        role: user.role,
+        audience:
+          audience || "default-api",
+        scope:
+          scope || "read write",
+        auth_type: "password"
+      },
+      JWT_SECRET,
+      {
+        expiresIn: "1h"
+      }
+    );
 
     return res.json({
-      access_token:
-        accessToken,
-
-      token_type:
-        "Bearer",
-
+      access_token: accessToken,
+      token_type: "Bearer",
       expires_in: 3600,
-
       audience:
-        audience ||
-        "default-api",
-
+        audience || "default-api",
       scope:
-        scope ||
-        "read write"
+        scope || "read write"
     });
 
   }
 
-  // CLIENT CREDENTIALS
+  // ======================================
+  // CLIENT CREDENTIALS GRANT
+  // ======================================
 
   if (
     grant_type ===
     "client_credentials"
   ) {
 
-    const accessToken =
-      jwt.sign(
-        {
-          client_id:
-            client_id,
-
-          role: "SYSTEM",
-
-          audience:
-            audience ||
-            "system-api",
-
-          scope:
-            scope ||
-            "system",
-
-          auth_type:
-            "client_credentials"
-        },
-        JWT_SECRET,
-        {
-          expiresIn: "1h"
-        }
-      );
+    const accessToken = jwt.sign(
+      {
+        client_id: client_id,
+        role: "SYSTEM",
+        audience:
+          audience || "system-api",
+        scope:
+          scope || "system",
+        auth_type:
+          "client_credentials"
+      },
+      JWT_SECRET,
+      {
+        expiresIn: "1h"
+      }
+    );
 
     return res.json({
-      access_token:
-        accessToken,
-
-      token_type:
-        "Bearer",
-
+      access_token: accessToken,
+      token_type: "Bearer",
       expires_in: 3600,
-
       audience:
-        audience ||
-        "system-api",
-
+        audience || "system-api",
       scope:
-        scope ||
-        "system"
+        scope || "system"
     });
 
   }
