@@ -12,8 +12,21 @@ const {
 
 const app = express();
 
+// ========================================
+// MIDDLEWARE
+// ========================================
+
 app.use(cors());
+
+// JSON SUPPORT
 app.use(bodyParser.json());
+
+// FORM URL ENCODED SUPPORT
+app.use(
+  bodyParser.urlencoded({
+    extended: true
+  })
+);
 
 const PORT = process.env.PORT || 3000;
 
@@ -568,129 +581,6 @@ app.get(
       return res.status(401).json({
         error:
           "Invalid encrypted token"
-      });
-
-    }
-
-  }
-);
-
-// ========================================
-// JWE PROCESS ORDER
-// ========================================
-
-app.post(
-  "/jwe/process-order",
-  async (req, res) => {
-
-    const authHeader =
-      req.headers.authorization;
-
-    if (!authHeader) {
-
-      return res.status(401).json({
-        error:
-          "Token missing"
-      });
-
-    }
-
-    try {
-
-      const token =
-        authHeader.split(" ")[1];
-
-      const { plaintext } =
-        await compactDecrypt(
-          token,
-          secretKey
-        );
-
-      const decoded =
-        JSON.parse(
-          new TextDecoder().decode(
-            plaintext
-          )
-        );
-
-      const response =
-        processPayload(req.body);
-
-      return res.json({
-        auth_type: "JWE",
-        authenticated_user:
-          decoded,
-        response
-      });
-
-    } catch {
-
-      return res.status(401).json({
-        error:
-          "Invalid encrypted token"
-      });
-
-    }
-
-  }
-);
-
-// ========================================
-// LOGOUT
-// ========================================
-
-app.post("/logout", (req, res) => {
-
-  return res.json({
-    status: "success",
-    message:
-      "Logout successful"
-  });
-
-});
-
-// ========================================
-// VALIDATE TOKEN
-// ========================================
-
-app.post(
-  "/validate-token",
-  (req, res) => {
-
-    const authHeader =
-      req.headers.authorization;
-
-    if (!authHeader) {
-
-      return res.status(401).json({
-        error:
-          "Token missing"
-      });
-
-    }
-
-    try {
-
-      const token =
-        authHeader.split(" ")[1];
-
-      const decoded =
-        jwt.verify(
-          token,
-          JWT_SECRET
-        );
-
-      return res.json({
-        valid: true,
-        decoded
-      });
-
-    } catch {
-
-      return res.status(401).json({
-        valid: false,
-        error:
-          "Invalid token"
       });
 
     }
