@@ -19,6 +19,10 @@ const PORT = process.env.PORT || 3000;
 
 const JWT_SECRET = "MY_SUPER_SECRET";
 
+// ========================================
+// MOCK USERS
+// ========================================
+
 const users = [
   {
     username: "admin",
@@ -32,9 +36,8 @@ const users = [
   }
 ];
 
-
 // ========================================
-// HEALTH
+// HEALTH API
 // ========================================
 
 app.get("/health", (req, res) => {
@@ -45,6 +48,51 @@ app.get("/health", (req, res) => {
 
 });
 
+// ========================================
+// BASIC AUTH LOGIN
+// ========================================
+
+app.post("/basic/login", (req, res) => {
+
+  const credentials = basicAuth(req);
+
+  if (!credentials) {
+
+    return res.status(401).json({
+      error: "Authorization header missing"
+    });
+
+  }
+
+  const {
+    name,
+    pass
+  } = credentials;
+
+  const user = users.find(
+    u =>
+      u.username === name &&
+      u.password === pass
+  );
+
+  if (!user) {
+
+    return res.status(401).json({
+      error: "Invalid username/password"
+    });
+
+  }
+
+  return res.json({
+    status: "success",
+    message: "Basic Auth Login Successful",
+    user: {
+      username: user.username,
+      role: user.role
+    }
+  });
+
+});
 
 // ========================================
 // OAUTH TOKEN API
@@ -56,7 +104,7 @@ app.post("/oauth/token", (req, res) => {
   let client_secret;
 
   // ======================================
-  // BASIC AUTH METHOD
+  // BASIC AUTH CLIENT AUTH METHOD
   // ======================================
 
   const credentials = basicAuth(req);
@@ -69,7 +117,7 @@ app.post("/oauth/token", (req, res) => {
   } else {
 
     // ======================================
-    // BODY AUTH METHOD
+    // BODY CLIENT AUTH METHOD
     // ======================================
 
     client_id = req.body.client_id;
@@ -129,7 +177,8 @@ app.post("/oauth/token", (req, res) => {
         username: user.username,
         role: user.role,
         audience: audience || "default-api",
-        scope: scope || "read write"
+        scope: scope || "read write",
+        auth_type: "password"
       },
       JWT_SECRET,
       {
@@ -141,6 +190,7 @@ app.post("/oauth/token", (req, res) => {
       access_token: accessToken,
       token_type: "Bearer",
       expires_in: 3600,
+      audience: audience || "default-api",
       scope: scope || "read write"
     });
 
@@ -159,7 +209,8 @@ app.post("/oauth/token", (req, res) => {
         client_id: client_id,
         role: "SYSTEM",
         audience: audience || "system-api",
-        scope: scope || "system"
+        scope: scope || "system",
+        auth_type: "client_credentials"
       },
       JWT_SECRET,
       {
@@ -171,6 +222,7 @@ app.post("/oauth/token", (req, res) => {
       access_token: accessToken,
       token_type: "Bearer",
       expires_in: 3600,
+      audience: audience || "system-api",
       scope: scope || "system"
     });
 
@@ -182,9 +234,8 @@ app.post("/oauth/token", (req, res) => {
 
 });
 
-
 // ========================================
-// OAUTH PROFILE API
+// OAUTH PROTECTED API
 // ========================================
 
 app.post("/oauth/profile", (req, res) => {
@@ -229,6 +280,173 @@ app.post("/oauth/profile", (req, res) => {
 
 });
 
+// ========================================
+// JWE SETUP
+// ========================================
+
+let secretKey;
+
+(async () => {
+
+  secretKey =
+    await generateSecret("A256GCM");
+
+})();
+
+// ========================================
+// JWE LOGIN
+// ========================================
+
+app.post("/jwe/login", async (req, res) => {
+
+  const {
+    username,
+    password
+  } = req.body;
+
+  const user = users.find(
+    u =>
+      u.username === username &&
+      u.password === password
+  );
+
+  if (!user) {
+
+    return res.status(401).json({
+      error: "Invalid credentials"
+    });
+
+  }
+
+  const payload = JSON.stringify({
+    username: user.username,
+    role: user.role,
+    secure: true,
+    time: Date.now()
+  });
+
+  const jwe =
+    await new CompactEncrypt(
+      new TextEncoder().encode(payload)
+    )
+      .setProtectedHeader({
+        alg: "dir",
+        enc: "A256GCM"
+      })
+      .encrypt(secretKey);
+
+  return res.json({
+    encrypted_token: jwe
+  });
+
+});
+
+// ========================================
+// JWE PROTECTED API
+// ========================================
+
+app.get("/jwe/profile", async (req, res) => {
+
+  const authHeader =
+    req.headers.authorization;
+
+  if (!authHeader) {
+
+    return res.status(401).json({
+      error: "Token missing"
+    });
+
+  }
+
+  try {
+
+    const token =
+      authHeader.split(" ")[1];
+
+    const { plaintext } =
+      await compactDecrypt(
+        token,
+        secretKey
+      );
+
+    const decoded = JSON.parse(
+      new TextDecoder().decode(
+        plaintext
+      )
+    );
+
+    return res.json({
+      message:
+        "JWE Protected API Success",
+      user: decoded
+    });
+
+  } catch (err) {
+
+    return res.status(401).json({
+      error:
+        "Invalid encrypted token"
+    });
+
+  }
+
+});
+
+// ========================================
+// LOGOUT MOCK API
+// ========================================
+
+app.post("/logout", (req, res) => {
+
+  return res.json({
+    status: "success",
+    message: "Logout successful"
+  });
+
+});
+
+// ========================================
+// VALIDATE TOKEN API
+// ========================================
+
+app.post("/validate-token", (req, res) => {
+
+  const authHeader =
+    req.headers.authorization;
+
+  if (!authHeader) {
+
+    return res.status(401).json({
+      error: "Token missing"
+    });
+
+  }
+
+  try {
+
+    const token =
+      authHeader.split(" ")[1];
+
+    const decoded = jwt.verify(
+      token,
+      JWT_SECRET
+    );
+
+    return res.json({
+      valid: true,
+      decoded
+    });
+
+  } catch {
+
+    return res.status(401).json({
+      valid: false,
+      error: "Invalid token"
+    });
+
+  }
+
+});
 
 // ========================================
 // START SERVER
