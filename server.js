@@ -37,6 +37,72 @@ const users = [
 ];
 
 // ========================================
+// COMMON PAYLOAD PROCESSOR
+// ========================================
+
+function processPayload(payload) {
+
+  return {
+
+    status: "SUCCESS",
+
+    message:
+      "Payload processed successfully",
+
+    extracted_details: {
+
+      tenant:
+        payload?.header_details?.tenant,
+
+      order_number:
+        payload?.order_details
+          ?.order_number,
+
+      service_level:
+        payload?.order_details
+          ?.service_level,
+
+      sender_name:
+        payload?.contact_details
+          ?.SenderName,
+
+      city:
+        payload?.shipment_details
+          ?.address1,
+
+      modified_by:
+        payload?.user_details
+          ?.modified_by,
+
+      part_number:
+        payload?.part_details?.[0]
+          ?.part_number,
+
+      quantity:
+        payload?.part_details?.[0]
+          ?.quantity,
+
+      flow_types:
+        payload?.header_details
+          ?.flow_types
+
+    },
+
+    order_status:
+      payload?.order_details
+        ?.service_level ===
+      "Source Flow Test"
+        ? "FLOW_TEST_TRIGGERED"
+        : "ORDER_CREATED",
+
+    received_at:
+      new Date().toISOString()
+
+  };
+
+}
+
+// ========================================
 // HEALTH API
 // ========================================
 
@@ -54,38 +120,39 @@ app.get("/health", (req, res) => {
 
 app.post("/basic/login", (req, res) => {
 
-  const credentials = basicAuth(req);
+  const credentials =
+    basicAuth(req);
 
   if (!credentials) {
 
     return res.status(401).json({
-      error: "Authorization header missing"
+      error:
+        "Authorization header missing"
     });
 
   }
 
-  const {
-    name,
-    pass
-  } = credentials;
-
   const user = users.find(
     u =>
-      u.username === name &&
-      u.password === pass
+      u.username ===
+        credentials.name &&
+      u.password ===
+        credentials.pass
   );
 
   if (!user) {
 
     return res.status(401).json({
-      error: "Invalid username/password"
+      error:
+        "Invalid username/password"
     });
 
   }
 
   return res.json({
     status: "success",
-    message: "Basic Auth Login Successful",
+    message:
+      "Basic Auth Login Successful",
     user: {
       username: user.username,
       role: user.role
@@ -93,6 +160,56 @@ app.post("/basic/login", (req, res) => {
   });
 
 });
+
+// ========================================
+// BASIC AUTH PROCESS ORDER
+// ========================================
+
+app.post(
+  "/basic/process-order",
+  (req, res) => {
+
+    const credentials =
+      basicAuth(req);
+
+    if (!credentials) {
+
+      return res.status(401).json({
+        error:
+          "Authorization header missing"
+      });
+
+    }
+
+    const user = users.find(
+      u =>
+        u.username ===
+          credentials.name &&
+        u.password ===
+          credentials.pass
+    );
+
+    if (!user) {
+
+      return res.status(401).json({
+        error:
+          "Invalid username/password"
+      });
+
+    }
+
+    const response =
+      processPayload(req.body);
+
+    return res.json({
+      auth_type: "BASIC_AUTH",
+      authenticated_user:
+        user.username,
+      response
+    });
+
+  }
+);
 
 // ========================================
 // OAUTH TOKEN API
@@ -103,25 +220,22 @@ app.post("/oauth/token", (req, res) => {
   let client_id;
   let client_secret;
 
-  // ======================================
-  // BASIC AUTH CLIENT AUTH METHOD
-  // ======================================
-
-  const credentials = basicAuth(req);
+  const credentials =
+    basicAuth(req);
 
   if (credentials) {
 
     client_id = credentials.name;
-    client_secret = credentials.pass;
+    client_secret =
+      credentials.pass;
 
   } else {
 
-    // ======================================
-    // BODY CLIENT AUTH METHOD
-    // ======================================
+    client_id =
+      req.body.client_id;
 
-    client_id = req.body.client_id;
-    client_secret = req.body.client_secret;
+    client_secret =
+      req.body.client_secret;
 
   }
 
@@ -133,152 +247,244 @@ app.post("/oauth/token", (req, res) => {
     scope
   } = req.body;
 
-  // ======================================
-  // CLIENT VALIDATION
-  // ======================================
-
   if (
-    client_id !== "mock_client" ||
-    client_secret !== "mock_secret"
+    client_id !==
+      "mock_client" ||
+    client_secret !==
+      "mock_secret"
   ) {
 
     return res.status(401).json({
-      error: "invalid_client",
-      error_description:
-        "Invalid client credentials"
+      error: "invalid_client"
     });
 
   }
 
-  // ======================================
   // PASSWORD GRANT
-  // ======================================
 
   if (grant_type === "password") {
 
     const user = users.find(
       u =>
-        u.username === username &&
+        u.username ===
+          username &&
         u.password === password
     );
 
     if (!user) {
 
       return res.status(401).json({
-        error: "invalid_grant",
-        error_description:
-          "Invalid username/password"
+        error: "invalid_grant"
       });
 
     }
 
-    const accessToken = jwt.sign(
-      {
-        username: user.username,
-        role: user.role,
-        audience: audience || "default-api",
-        scope: scope || "read write",
-        auth_type: "password"
-      },
-      JWT_SECRET,
-      {
-        expiresIn: "1h"
-      }
-    );
+    const accessToken =
+      jwt.sign(
+        {
+          username:
+            user.username,
+
+          role: user.role,
+
+          audience:
+            audience ||
+            "default-api",
+
+          scope:
+            scope ||
+            "read write",
+
+          auth_type:
+            "password"
+        },
+        JWT_SECRET,
+        {
+          expiresIn: "1h"
+        }
+      );
 
     return res.json({
-      access_token: accessToken,
-      token_type: "Bearer",
+      access_token:
+        accessToken,
+
+      token_type:
+        "Bearer",
+
       expires_in: 3600,
-      audience: audience || "default-api",
-      scope: scope || "read write"
+
+      audience:
+        audience ||
+        "default-api",
+
+      scope:
+        scope ||
+        "read write"
     });
 
   }
 
-  // ======================================
-  // CLIENT CREDENTIALS GRANT
-  // ======================================
+  // CLIENT CREDENTIALS
 
   if (
-    grant_type === "client_credentials"
+    grant_type ===
+    "client_credentials"
   ) {
 
-    const accessToken = jwt.sign(
-      {
-        client_id: client_id,
-        role: "SYSTEM",
-        audience: audience || "system-api",
-        scope: scope || "system",
-        auth_type: "client_credentials"
-      },
-      JWT_SECRET,
-      {
-        expiresIn: "1h"
-      }
-    );
+    const accessToken =
+      jwt.sign(
+        {
+          client_id:
+            client_id,
+
+          role: "SYSTEM",
+
+          audience:
+            audience ||
+            "system-api",
+
+          scope:
+            scope ||
+            "system",
+
+          auth_type:
+            "client_credentials"
+        },
+        JWT_SECRET,
+        {
+          expiresIn: "1h"
+        }
+      );
 
     return res.json({
-      access_token: accessToken,
-      token_type: "Bearer",
+      access_token:
+        accessToken,
+
+      token_type:
+        "Bearer",
+
       expires_in: 3600,
-      audience: audience || "system-api",
-      scope: scope || "system"
+
+      audience:
+        audience ||
+        "system-api",
+
+      scope:
+        scope ||
+        "system"
     });
 
   }
 
   return res.status(400).json({
-    error: "unsupported_grant_type"
+    error:
+      "unsupported_grant_type"
   });
 
 });
 
 // ========================================
-// OAUTH PROTECTED API
+// OAUTH PROFILE
 // ========================================
 
-app.post("/oauth/profile", (req, res) => {
+app.post(
+  "/oauth/profile",
+  (req, res) => {
 
-  const authHeader =
-    req.headers.authorization;
+    const authHeader =
+      req.headers.authorization;
 
-  if (!authHeader) {
+    if (!authHeader) {
 
-    return res.status(401).json({
-      error: "Token missing"
-    });
+      return res.status(401).json({
+        error:
+          "Token missing"
+      });
+
+    }
+
+    try {
+
+      const token =
+        authHeader.split(" ")[1];
+
+      const decoded =
+        jwt.verify(
+          token,
+          JWT_SECRET
+        );
+
+      return res.json({
+        message:
+          "OAuth Protected API Success",
+
+        user: decoded
+      });
+
+    } catch {
+
+      return res.status(401).json({
+        error:
+          "Invalid or expired token"
+      });
+
+    }
 
   }
+);
 
-  const token = authHeader.split(" ")[1];
+// ========================================
+// OAUTH PROCESS ORDER
+// ========================================
 
-  try {
+app.post(
+  "/oauth/process-order",
+  (req, res) => {
 
-    const decoded = jwt.verify(
-      token,
-      JWT_SECRET
-    );
+    const authHeader =
+      req.headers.authorization;
 
-    return res.json({
-      message:
-        "OAuth Protected API Success",
-      user: decoded,
-      headers: {
-        authorization: authHeader
-      }
-    });
+    if (!authHeader) {
 
-  } catch (err) {
+      return res.status(401).json({
+        error:
+          "Token missing"
+      });
 
-    return res.status(401).json({
-      error:
-        "Invalid or expired token"
-    });
+    }
+
+    try {
+
+      const token =
+        authHeader.split(" ")[1];
+
+      const decoded =
+        jwt.verify(
+          token,
+          JWT_SECRET
+        );
+
+      const response =
+        processPayload(req.body);
+
+      return res.json({
+        auth_type: "OAUTH",
+        authenticated_user:
+          decoded,
+        response
+      });
+
+    } catch {
+
+      return res.status(401).json({
+        error:
+          "Invalid or expired token"
+      });
+
+    }
 
   }
-
-});
+);
 
 // ========================================
 // JWE SETUP
@@ -289,7 +495,9 @@ let secretKey;
 (async () => {
 
   secretKey =
-    await generateSecret("A256GCM");
+    await generateSecret(
+      "A256GCM"
+    );
 
 })();
 
@@ -297,156 +505,242 @@ let secretKey;
 // JWE LOGIN
 // ========================================
 
-app.post("/jwe/login", async (req, res) => {
+app.post(
+  "/jwe/login",
+  async (req, res) => {
 
-  const {
-    username,
-    password
-  } = req.body;
+    const {
+      username,
+      password
+    } = req.body;
 
-  const user = users.find(
-    u =>
-      u.username === username &&
-      u.password === password
-  );
-
-  if (!user) {
-
-    return res.status(401).json({
-      error: "Invalid credentials"
-    });
-
-  }
-
-  const payload = JSON.stringify({
-    username: user.username,
-    role: user.role,
-    secure: true,
-    time: Date.now()
-  });
-
-  const jwe =
-    await new CompactEncrypt(
-      new TextEncoder().encode(payload)
-    )
-      .setProtectedHeader({
-        alg: "dir",
-        enc: "A256GCM"
-      })
-      .encrypt(secretKey);
-
-  return res.json({
-    encrypted_token: jwe
-  });
-
-});
-
-// ========================================
-// JWE PROTECTED API
-// ========================================
-
-app.get("/jwe/profile", async (req, res) => {
-
-  const authHeader =
-    req.headers.authorization;
-
-  if (!authHeader) {
-
-    return res.status(401).json({
-      error: "Token missing"
-    });
-
-  }
-
-  try {
-
-    const token =
-      authHeader.split(" ")[1];
-
-    const { plaintext } =
-      await compactDecrypt(
-        token,
-        secretKey
-      );
-
-    const decoded = JSON.parse(
-      new TextDecoder().decode(
-        plaintext
-      )
+    const user = users.find(
+      u =>
+        u.username ===
+          username &&
+        u.password ===
+          password
     );
 
+    if (!user) {
+
+      return res.status(401).json({
+        error:
+          "Invalid credentials"
+      });
+
+    }
+
+    const payload =
+      JSON.stringify({
+        username:
+          user.username,
+
+        role: user.role,
+
+        secure: true,
+
+        time: Date.now()
+      });
+
+    const jwe =
+      await new CompactEncrypt(
+        new TextEncoder().encode(
+          payload
+        )
+      )
+        .setProtectedHeader({
+          alg: "dir",
+          enc: "A256GCM"
+        })
+        .encrypt(secretKey);
+
     return res.json({
-      message:
-        "JWE Protected API Success",
-      user: decoded
-    });
-
-  } catch (err) {
-
-    return res.status(401).json({
-      error:
-        "Invalid encrypted token"
+      encrypted_token: jwe
     });
 
   }
-
-});
+);
 
 // ========================================
-// LOGOUT MOCK API
+// JWE PROFILE
+// ========================================
+
+app.get(
+  "/jwe/profile",
+  async (req, res) => {
+
+    const authHeader =
+      req.headers.authorization;
+
+    if (!authHeader) {
+
+      return res.status(401).json({
+        error:
+          "Token missing"
+      });
+
+    }
+
+    try {
+
+      const token =
+        authHeader.split(" ")[1];
+
+      const { plaintext } =
+        await compactDecrypt(
+          token,
+          secretKey
+        );
+
+      const decoded =
+        JSON.parse(
+          new TextDecoder().decode(
+            plaintext
+          )
+        );
+
+      return res.json({
+        message:
+          "JWE Protected API Success",
+
+        user: decoded
+      });
+
+    } catch {
+
+      return res.status(401).json({
+        error:
+          "Invalid encrypted token"
+      });
+
+    }
+
+  }
+);
+
+// ========================================
+// JWE PROCESS ORDER
+// ========================================
+
+app.post(
+  "/jwe/process-order",
+  async (req, res) => {
+
+    const authHeader =
+      req.headers.authorization;
+
+    if (!authHeader) {
+
+      return res.status(401).json({
+        error:
+          "Token missing"
+      });
+
+    }
+
+    try {
+
+      const token =
+        authHeader.split(" ")[1];
+
+      const { plaintext } =
+        await compactDecrypt(
+          token,
+          secretKey
+        );
+
+      const decoded =
+        JSON.parse(
+          new TextDecoder().decode(
+            plaintext
+          )
+        );
+
+      const response =
+        processPayload(req.body);
+
+      return res.json({
+        auth_type: "JWE",
+        authenticated_user:
+          decoded,
+        response
+      });
+
+    } catch {
+
+      return res.status(401).json({
+        error:
+          "Invalid encrypted token"
+      });
+
+    }
+
+  }
+);
+
+// ========================================
+// LOGOUT
 // ========================================
 
 app.post("/logout", (req, res) => {
 
   return res.json({
     status: "success",
-    message: "Logout successful"
+    message:
+      "Logout successful"
   });
 
 });
 
 // ========================================
-// VALIDATE TOKEN API
+// VALIDATE TOKEN
 // ========================================
 
-app.post("/validate-token", (req, res) => {
+app.post(
+  "/validate-token",
+  (req, res) => {
 
-  const authHeader =
-    req.headers.authorization;
+    const authHeader =
+      req.headers.authorization;
 
-  if (!authHeader) {
+    if (!authHeader) {
 
-    return res.status(401).json({
-      error: "Token missing"
-    });
+      return res.status(401).json({
+        error:
+          "Token missing"
+      });
+
+    }
+
+    try {
+
+      const token =
+        authHeader.split(" ")[1];
+
+      const decoded =
+        jwt.verify(
+          token,
+          JWT_SECRET
+        );
+
+      return res.json({
+        valid: true,
+        decoded
+      });
+
+    } catch {
+
+      return res.status(401).json({
+        valid: false,
+        error:
+          "Invalid token"
+      });
+
+    }
 
   }
-
-  try {
-
-    const token =
-      authHeader.split(" ")[1];
-
-    const decoded = jwt.verify(
-      token,
-      JWT_SECRET
-    );
-
-    return res.json({
-      valid: true,
-      decoded
-    });
-
-  } catch {
-
-    return res.status(401).json({
-      valid: false,
-      error: "Invalid token"
-    });
-
-  }
-
-});
+);
 
 // ========================================
 // START SERVER
