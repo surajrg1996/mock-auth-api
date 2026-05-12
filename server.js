@@ -238,10 +238,6 @@ app.post("/oauth/token", (req, res) => {
     scope
   } = req.body;
 
-  // ======================================
-  // CLIENT VALIDATION
-  // ======================================
-
   if (
     client_id !== "mock_client" ||
     client_secret !== "mock_secret"
@@ -255,9 +251,7 @@ app.post("/oauth/token", (req, res) => {
 
   }
 
-  // ======================================
   // PASSWORD GRANT
-  // ======================================
 
   if (grant_type === "password") {
 
@@ -305,9 +299,7 @@ app.post("/oauth/token", (req, res) => {
 
   }
 
-  // ======================================
   // CLIENT CREDENTIALS GRANT
-  // ======================================
 
   if (
     grant_type ===
@@ -651,6 +643,233 @@ app.post(
       return res.status(401).json({
         error:
           "Invalid encrypted token"
+      });
+
+    }
+
+  }
+);
+
+// ========================================
+// GRAPH API TOKEN
+// ========================================
+
+app.post("/graph/token", (req, res) => {
+
+  const {
+    client_id,
+    client_secret,
+    username,
+    password
+  } = req.body;
+
+  if (
+    client_id !== "mock_client" ||
+    client_secret !== "mock_secret"
+  ) {
+
+    return res.status(401).json({
+      error: "invalid_client"
+    });
+
+  }
+
+  const user = users.find(
+    u =>
+      u.username === username &&
+      u.password === password
+  );
+
+  if (!user) {
+
+    return res.status(401).json({
+      error: "invalid_user"
+    });
+
+  }
+
+  const token = jwt.sign(
+    {
+      username: user.username,
+      role: user.role,
+      api_type: "GRAPH_API"
+    },
+    JWT_SECRET,
+    {
+      expiresIn: "1h"
+    }
+  );
+
+  return res.json({
+    access_token: token,
+    token_type: "Bearer",
+    expires_in: 3600
+  });
+
+});
+
+// ========================================
+// GRAPH API ME
+// ========================================
+
+app.get("/graph/v1.0/me", (req, res) => {
+
+  const authHeader =
+    req.headers.authorization;
+
+  if (!authHeader) {
+
+    return res.status(401).json({
+      error: "Token missing"
+    });
+
+  }
+
+  try {
+
+    const token =
+      authHeader.split(" ")[1];
+
+    const decoded =
+      jwt.verify(
+        token,
+        JWT_SECRET
+      );
+
+    return res.json({
+      id: "USR001",
+      displayName:
+        decoded.username,
+      givenName:
+        decoded.username,
+      mail:
+        `${decoded.username}@mock.com`,
+      jobTitle:
+        decoded.role,
+      officeLocation:
+        "Pune",
+      preferredLanguage:
+        "en-US"
+    });
+
+  } catch {
+
+    return res.status(401).json({
+      error: "Invalid token"
+    });
+
+  }
+
+});
+
+// ========================================
+// GRAPH API USERS
+// ========================================
+
+app.get("/graph/v1.0/users", (req, res) => {
+
+  return res.json({
+    value: [
+      {
+        id: "USR001",
+        displayName: "admin",
+        mail: "admin@mock.com",
+        role: "ADMIN"
+      },
+      {
+        id: "USR002",
+        displayName: "tester",
+        mail: "tester@mock.com",
+        role: "TESTER"
+      }
+    ]
+  });
+
+});
+
+// ========================================
+// GRAPH API GROUPS
+// ========================================
+
+app.get("/graph/v1.0/groups", (req, res) => {
+
+  return res.json({
+    value: [
+      {
+        id: "GRP001",
+        displayName: "Admins"
+      },
+      {
+        id: "GRP002",
+        displayName: "Testers"
+      }
+    ]
+  });
+
+});
+
+// ========================================
+// GRAPH SEND MAIL
+// ========================================
+
+app.post(
+  "/graph/v1.0/sendMail",
+  (req, res) => {
+
+    return res.json({
+      status: "SUCCESS",
+      message:
+        "Mail sent successfully",
+      request_body: req.body
+    });
+
+  }
+);
+
+// ========================================
+// GRAPH PROCESS ORDER
+// ========================================
+
+app.post(
+  "/graph/v1.0/process-order",
+  (req, res) => {
+
+    const authHeader =
+      req.headers.authorization;
+
+    if (!authHeader) {
+
+      return res.status(401).json({
+        error: "Token missing"
+      });
+
+    }
+
+    try {
+
+      const token =
+        authHeader.split(" ")[1];
+
+      const decoded =
+        jwt.verify(
+          token,
+          JWT_SECRET
+        );
+
+      const response =
+        processPayload(req.body);
+
+      return res.json({
+        api_type: "GRAPH_API",
+        authenticated_user:
+          decoded.username,
+        response
+      });
+
+    } catch {
+
+      return res.status(401).json({
+        error: "Invalid token"
       });
 
     }
