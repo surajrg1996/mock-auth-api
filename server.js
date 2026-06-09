@@ -988,6 +988,19 @@ app.post("/mock/bad-request", (req, res) => {
 
 });
 
+// ========================================
+// HTTP 301 JSON RESPONSE API
+// ========================================
+
+app.post("/mock/301", (req, res) => {
+
+  return res.status(301).json({
+    status: "MOVED_PERMANENTLY",
+    message: "Resource has moved permanently",
+    redirect_url: "/health"
+  });
+
+});
 
 // ========================================
 // LOGOUT UPDATED METHOD
