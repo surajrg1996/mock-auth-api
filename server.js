@@ -927,6 +927,103 @@ app.post(
 );
 
 // ========================================
+// MOCK INVALID RESPONSE POST API
+// ========================================
+
+app.post(
+  "/mock/process-order-invalid",
+  (req, res) => {
+
+    const responseType =
+      req.query.type || "json";
+
+    switch (responseType) {
+
+      case "json":
+
+        res.setHeader(
+          "Content-Type",
+          "application/json"
+        );
+
+        return res.send(
+          '{"status":"SUCCESS","message":"Broken JSON Response"'
+        );
+
+      case "xml":
+
+        res.setHeader(
+          "Content-Type",
+          "application/xml"
+        );
+
+        return res.send(`
+          <response>
+            <status>SUCCESS</status>
+            <message>Broken XML Response
+          </response>
+        `);
+
+      case "text":
+
+        res.setHeader(
+          "Content-Type",
+          "text/plain"
+        );
+
+        return res.send(
+          "Plain text response instead of JSON"
+        );
+
+      case "html":
+
+        res.setHeader(
+          "Content-Type",
+          "text/html"
+        );
+
+        return res.send(`
+          <html>
+            <body>
+              <h1>Unexpected HTML Response</h1>
+            </body>
+          </html>
+        `);
+
+      case "empty":
+
+        return res.status(200).send();
+
+      case "500":
+
+        return res.status(500).json({
+          error:
+            "Internal Server Error"
+        });
+
+      case "partial":
+
+        return res.json({
+          status: "SUCCESS",
+          order_number:
+            req.body?.order_details
+              ?.order_number
+        });
+
+      default:
+
+        return res.json({
+          status: "SUCCESS",
+          received_payload:
+            req.body
+        });
+
+    }
+
+  }
+);
+
+// ========================================
 // LOGOUT UPDATED METHOD
 // ========================================
 
