@@ -927,98 +927,48 @@ app.post(
 );
 
 // ========================================
-// MOCK INVALID RESPONSE POST API
+// INVALID JSON / XML RESPONSE API
 // ========================================
 
 app.post(
-  "/mock/process-order-invalid",
+  "/mock/invalid-payload",
   (req, res) => {
 
-    const responseType =
-      req.query.type || "json";
+    const type = req.query.type || "json";
 
-    switch (responseType) {
+    if (type === "json") {
 
-      case "json":
+      res.set(
+        "Content-Type",
+        "application/json"
+      );
 
-        res.setHeader(
-          "Content-Type",
-          "application/json"
-        );
-
-        return res.send(
-          '{"status":"SUCCESS","message":"Broken JSON Response"'
-        );
-
-      case "xml":
-
-        res.setHeader(
-          "Content-Type",
-          "application/xml"
-        );
-
-        return res.send(`
-          <response>
-            <status>SUCCESS</status>
-            <message>Broken XML Response
-          </response>
-        `);
-
-      case "text":
-
-        res.setHeader(
-          "Content-Type",
-          "text/plain"
-        );
-
-        return res.send(
-          "Plain text response instead of JSON"
-        );
-
-      case "html":
-
-        res.setHeader(
-          "Content-Type",
-          "text/html"
-        );
-
-        return res.send(`
-          <html>
-            <body>
-              <h1>Unexpected HTML Response</h1>
-            </body>
-          </html>
-        `);
-
-      case "empty":
-
-        return res.status(200).send();
-
-      case "500":
-
-        return res.status(500).json({
-          error:
-            "Internal Server Error"
-        });
-
-      case "partial":
-
-        return res.json({
-          status: "SUCCESS",
-          order_number:
-            req.body?.order_details
-              ?.order_number
-        });
-
-      default:
-
-        return res.json({
-          status: "SUCCESS",
-          received_payload:
-            req.body
-        });
+      // Invalid JSON
+      return res.send(
+        '{"status":"SUCCESS","message":"Invalid JSON Response"'
+      );
 
     }
+
+    if (type === "xml") {
+
+      res.set(
+        "Content-Type",
+        "application/xml"
+      );
+
+      // Invalid XML
+      return res.send(`
+        <response>
+          <status>SUCCESS</status>
+          <message>Invalid XML Response</message>
+      `);
+
+    }
+
+    return res.status(400).send(
+      "Supported types: json, xml"
+    );
 
   }
 );
