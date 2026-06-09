@@ -974,6 +974,20 @@ app.post(
 );
 
 // ========================================
+// BAD REQUEST (400) API
+// ========================================
+
+app.post("/mock/bad-request", (req, res) => {
+
+  return res.status(400).json({
+    status: "FAILED",
+    error_code: "BAD_REQUEST",
+    message: "Invalid request payload",
+    timestamp: new Date().toISOString()
+  });
+
+
+// ========================================
 // LOGOUT UPDATED METHOD
 // ========================================
 
