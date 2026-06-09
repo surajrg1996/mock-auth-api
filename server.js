@@ -986,6 +986,8 @@ app.post("/mock/bad-request", (req, res) => {
     timestamp: new Date().toISOString()
   });
 
+});
+
 
 // ========================================
 // LOGOUT UPDATED METHOD
