@@ -1003,21 +1003,16 @@ app.post("/mock/301", (req, res) => {
 });
 
 // ========================================
-// CONDITION MAPPING RESPONSE API
+// ECHO CONDITION MAPPING API
 // ========================================
 
 app.post("/mock/condition-mapping", (req, res) => {
 
   return res.json({
-    My_Condition_01: "Single Value Mapping",
-    My_Condition_02: "Single Value Mapping",
-    closed: "Single Value Mapping",
-    TestGroup: [
-      {
-        can_cancel: "Line Value - 0",
-        can_close: "Line Value - 1"
-      }
-    ]
+    My_Condition_01: req.body?.My_Condition_01,
+    My_Condition_02: req.body?.My_Condition_02,
+    closed: req.body?.closed,
+    TestGroup: req.body?.TestGroup
   });
 
 });
