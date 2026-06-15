@@ -1009,10 +1009,11 @@ app.post("/mock/301", (req, res) => {
 app.post("/mock/condition-mapping", (req, res) => {
 
   return res.json({
-    My_Condition_01: req.body?.My_Condition_01,
-    My_Condition_02: req.body?.My_Condition_02,
-    closed: req.body?.closed,
-    TestGroup: req.body?.TestGroup
+    IF_ELSE_01: req.body?.IF_ELSE_01,
+    IF_ELSE_02: req.body?.IF_ELSE_02,
+    Boolean_Condition: req.body?.Boolean_Condition,
+    Condition_Mapping_Line_Builder:
+      req.body?.Condition_Mapping_Line_Builder
   });
 
 });
