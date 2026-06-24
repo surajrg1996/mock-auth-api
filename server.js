@@ -1012,7 +1012,7 @@ app.post("/mock/condition-mapping", (req, res) => {
     IF_ELSEIF_ELSE_02: req.body?.IF_ELSEIF_ELSE_02,
     IF_ELSEIF_ELSE_03: req.body?.IF_ELSEIF_ELSE_03,
     Boolean_Condition: req.body?.Boolean_Condition,
-    Condition_Mapping_Line_Builder: req.body?.Condition_Mapping_Line_Builder
+    test_conditionr: req.body?.test_condition
   });
 });
 
