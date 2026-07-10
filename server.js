@@ -182,52 +182,63 @@ app.get("/health", (req, res) => {
 });
 
 // ========================================
-// BASIC AUTH LOGIN
+// BASIC AUTH PROFILE API
 // ========================================
 
-app.post("/basic/login", (req, res) => {
+app.post("/basic/profile", (req, res) => {
 
-  const credentials =
-    basicAuth(req);
+  console.log("========== BASIC PROFILE API ==========");
+
+  const credentials = basicAuth(req);
 
   if (!credentials) {
 
+    console.log("Authorization header missing");
+
     return res.status(401).json({
-      error:
-        "Authorization header missing"
+      error: "Authorization header missing"
     });
 
   }
 
   const user = users.find(
     u =>
-      u.username ===
-        credentials.name &&
-      u.password ===
-        credentials.pass
+      u.username === credentials.name &&
+      u.password === credentials.pass
   );
 
   if (!user) {
 
+    console.log("Invalid username/password");
+
     return res.status(401).json({
-      error:
-        "Invalid username/password"
+      error: "Invalid username/password"
     });
 
   }
 
-  return res.json({
-    status: "success",
-    message:
-      "Basic Auth Login Successful",
-    user: {
+  console.log("Authenticated User:", user.username);
+  console.log("Request Body:");
+  console.log(JSON.stringify(req.body, null, 2));
+
+  const response = {
+    status: "SUCCESS",
+    message: "Basic Authentication Successful",
+    authenticated_user: {
       username: user.username,
       role: user.role
-    }
-  });
+    },
+    request_payload: req.body,
+    timestamp: new Date().toISOString()
+  };
+
+  console.log("Response:");
+  console.log(JSON.stringify(response, null, 2));
+  console.log("======================================");
+
+  return res.json(response);
 
 });
-
 // ========================================
 // BASIC AUTH PROCESS ORDER
 // ========================================
