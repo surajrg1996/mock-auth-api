@@ -26,6 +26,62 @@ app.use(
   })
 );
 
+// ========================================
+// GLOBAL REQUEST/RESPONSE LOGGER
+// ========================================
+
+app.use((req, res, next) => {
+
+  const startTime = Date.now();
+
+  console.log("\n========================================");
+  console.log("Incoming Request");
+  console.log("========================================");
+  console.log("Time       :", new Date().toISOString());
+  console.log("Method     :", req.method);
+  console.log("Endpoint   :", req.originalUrl);
+  console.log("IP Address :", req.ip);
+
+  console.log("\nHeaders:");
+  console.log(JSON.stringify(req.headers, null, 2));
+
+  console.log("\nQuery Params:");
+  console.log(JSON.stringify(req.query, null, 2));
+
+  console.log("\nRequest Body:");
+  console.log(JSON.stringify(req.body, null, 2));
+
+  const originalJson = res.json;
+  const originalSend = res.send;
+
+  res.json = function (body) {
+
+    console.log("\nResponse Status :", res.statusCode);
+    console.log("Response Body:");
+    console.log(JSON.stringify(body, null, 2));
+    console.log("Execution Time :", Date.now() - startTime, "ms");
+    console.log("========================================\n");
+
+    return originalJson.call(this, body);
+
+  };
+
+  res.send = function (body) {
+
+    console.log("\nResponse Status :", res.statusCode);
+    console.log("Response Body:");
+    console.log(body);
+    console.log("Execution Time :", Date.now() - startTime, "ms");
+    console.log("========================================\n");
+
+    return originalSend.call(this, body);
+
+  };
+
+  next();
+
+});
+
 const PORT = process.env.PORT || 3000;
 
 const JWT_SECRET = "MY_SUPER_SECRET";
