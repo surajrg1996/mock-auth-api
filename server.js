@@ -100,7 +100,13 @@ const users = [
     username: "tester",
     password: "Test@123",
     role: "TESTER"
+  },
+  {
+    username: "Suraj",
+    password: "Test@qa",
+    role: "USER"
   }
+
 ];
 
 // ========================================
