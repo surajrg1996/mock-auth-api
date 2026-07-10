@@ -1073,6 +1073,37 @@ app.post("/mock/condition-mapping", (req, res) => {
 });
 
 // ========================================
+// PUBLIC PROFILE API (NO AUTH)
+// ========================================
+
+app.post("/public/profile", (req, res) => {
+
+  console.log("========== PUBLIC PROFILE ==========");
+  console.log("Endpoint Hit: /public/profile");
+  console.log("Request Body:");
+  console.log(JSON.stringify(req.body, null, 2));
+
+  const response = {
+    status: "SUCCESS",
+    message: "Public API accessed successfully",
+    user: {
+      username: "admin",
+      role: "ADMIN",
+      auth_type: "NONE"
+    },
+    received_payload: req.body,
+    timestamp: new Date().toISOString()
+  };
+
+  console.log("Response:");
+  console.log(JSON.stringify(response, null, 2));
+  console.log("====================================");
+
+  return res.status(200).json(response);
+
+});
+
+// ========================================
 // LOGOUT UPDATED METHOD
 // ========================================
 
