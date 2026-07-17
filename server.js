@@ -1120,14 +1120,54 @@ app.post("/public/profile", (req, res) => {
 
 });
 
+// ========================================
+// MOCK DSL API (BASIC AUTH)
+// ========================================
+
 app.post("/mock/dsl", (req, res) => {
 
-  return res.json({
+  const credentials = basicAuth(req);
+
+  if (!credentials) {
+
+    return res.status(401).json({
+      error: "Authorization header missing"
+    });
+
+  }
+
+  const user = users.find(
+    u =>
+      u.username === credentials.name &&
+      u.password === credentials.pass
+  );
+
+  if (!user) {
+
+    return res.status(401).json({
+      error: "Invalid username/password"
+    });
+
+  }
+
+  console.log("========== MOCK DSL ==========");
+  console.log("Authenticated User:", user.username);
+  console.log("Request:");
+  console.log(JSON.stringify(req.body, null, 2));
+
+  const response = {
     status: "SUCCESS",
     message: "Mock DSL API executed successfully",
+    authenticated_user: user.username,
     received_payload: req.body,
     timestamp: new Date().toISOString()
-  });
+  };
+
+  console.log("Response:");
+  console.log(JSON.stringify(response, null, 2));
+  console.log("==============================");
+
+  return res.json(response);
 
 });
 
