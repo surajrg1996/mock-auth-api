@@ -1120,6 +1120,17 @@ app.post("/public/profile", (req, res) => {
 
 });
 
+app.post("/mock/dsl", (req, res) => {
+
+  return res.json({
+    status: "SUCCESS",
+    message: "Mock DSL API executed successfully",
+    received_payload: req.body,
+    timestamp: new Date().toISOString()
+  });
+
+});
+
 // ========================================
 // LOGOUT UPDATED METHOD
 // ========================================
