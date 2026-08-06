@@ -1125,15 +1125,12 @@ app.post("/public/profile", (req, res) => {
 // ========================================
 
 app.post("/mock/dsl", (req, res) => {
-
   const credentials = basicAuth(req);
 
   if (!credentials) {
-
     return res.status(401).json({
       error: "Authorization header missing"
     });
-
   }
 
   const user = users.find(
@@ -1143,34 +1140,347 @@ app.post("/mock/dsl", (req, res) => {
   );
 
   if (!user) {
-
     return res.status(401).json({
       error: "Invalid username/password"
     });
-
   }
 
-  console.log("========== MOCK DSL ==========");
-  console.log("Authenticated User:", user.username);
-  console.log("Request:");
-  console.log(JSON.stringify(req.body, null, 2));
+  try {
+    /*
+     * Values sent by Lynx are available here.
+     *
+     * Expected request:
+     * {
+     *   "dsl_flag": "Y",
+     *   "order_number": "06082601",
+     *   "delivery_country": "United States",
+     *   "delivery_postal_code": "40219",
+     *   "line_number": "1",
+     *   "order_qty": "15",
+     *   "actual_time": "2026-08-06 07:20:09+00:00",
+     *   "flow_type": "ORDER_CREATE",
+     *   "order_type": "STANDARD",
+     *   "current_state": "NEW",
+     *   "priority": "HIGH",
+     *   "part_number": "X0800",
+     *   "tenant": "TENANT-01",
+     *   "delivery_state": "Kentucky",
+     *   "delivery_city": "Louisville",
+     *   "autoprocess": "true"
+     * }
+     */
 
-  const response = {
-    status: "SUCCESS",
-    message: "Mock DSL API executed successfully",
-    authenticated_user: user.username,
-    received_payload: req.body,
-    timestamp: new Date().toISOString()
-  };
+    const {
+      dsl_flag,
+      order_number,
+      delivery_country,
+      delivery_postal_code,
+      line_number,
+      order_qty,
+      actual_time,
+      flow_type,
+      order_type,
+      current_state,
+      priority,
+      part_number,
+      tenant,
+      delivery_state,
+      delivery_city,
+      autoprocess
+    } = req.body;
 
-  console.log("Response:");
-  console.log(JSON.stringify(response, null, 2));
-  console.log("==============================");
+    // ----------------------------------------
+    // VALIDATE REQUIRED VALUES
+    // ----------------------------------------
 
-  return res.json(response);
+    const requiredFields = {
+      dsl_flag,
+      order_number,
+      delivery_country,
+      delivery_postal_code,
+      line_number,
+      order_qty,
+      actual_time,
+      flow_type,
+      order_type,
+      current_state,
+      priority,
+      part_number,
+      tenant,
+      delivery_state,
+      delivery_city,
+      autoprocess
+    };
 
+    const missingFields = Object.entries(requiredFields)
+      .filter(
+        ([, value]) =>
+          value === undefined ||
+          value === null ||
+          value === ""
+      )
+      .map(([field]) => field);
+
+    if (missingFields.length > 0) {
+      return res.status(400).json({
+        Result: {
+          Success: "Trigger initiation failed",
+          Error:
+            `Missing required fields: ${missingFields.join(", ")}`
+        }
+      });
+    }
+
+    const requestedQuantity = Number(order_qty);
+
+    if (
+      !Number.isInteger(requestedQuantity) ||
+      requestedQuantity <= 0
+    ) {
+      return res.status(400).json({
+        Result: {
+          Success: "Trigger initiation failed",
+          Error: "order_qty must be a positive integer"
+        }
+      });
+    }
+
+    // ----------------------------------------
+    // DUMMY INVENTORY
+    // ----------------------------------------
+
+    const dummyInventory = [
+      {
+        returnedPartNumber: "X0625",
+        onHandInventory: 5,
+        substituteFlag: "Y",
+        chain: "Alternate",
+        materialDescription:
+          "TOWER ASSY,CONTROLLER, ROHS,1.4.0",
+        materialType: "Interchangeable"
+      },
+      {
+        returnedPartNumber: "X0660",
+        onHandInventory: 2,
+        substituteFlag: "Y",
+        chain: "Alternate",
+        materialDescription:
+          "TOWER ASSY, CONTROLLER,ROHS",
+        materialType: "Interchangeable"
+      },
+      {
+        returnedPartNumber: "X0805",
+        onHandInventory: 5,
+        substituteFlag: "Y",
+        chain: "Alternate",
+        materialDescription:
+          "TOWER ASSY, SLAVE,ROHS,1.4.2",
+        materialType: "Interchangeable"
+      },
+      {
+        // Master item uses the part number received from Lynx.
+        returnedPartNumber: String(part_number),
+        onHandInventory: 3,
+        substituteFlag: "N",
+        chain: "Master",
+        materialDescription:
+          "TOWER ASSY,CONTROLLER, ROHS,1.6.0",
+        materialType: "Not Replaced"
+      }
+    ];
+
+    /*
+     * dsl_flag = Y:
+     * Return master and substitute parts.
+     *
+     * dsl_flag = N:
+     * Return only the requested/master part.
+     */
+
+    const inventory =
+      String(dsl_flag).toUpperCase() === "Y"
+        ? dummyInventory
+        : dummyInventory.filter(
+            item => item.chain === "Master"
+          );
+
+    // ----------------------------------------
+    // QUANTITY-BASED AVAILABILITY
+    // ----------------------------------------
+
+    const totalChainOnHand = inventory.reduce(
+      (total, item) =>
+        total + item.onHandInventory,
+      0
+    );
+
+    const stockAvailable =
+      totalChainOnHand >= requestedQuantity;
+
+    const failureReason = stockAvailable
+      ? null
+      : `Requested quantity ${requestedQuantity} exceeds available quantity ${totalChainOnHand}`;
+
+    // ----------------------------------------
+    // CREATE DSL LINE ITEMS
+    // ----------------------------------------
+
+    const dslResponseLineItem = inventory.map(
+      item => ({
+        orderLineItemId: String(line_number),
+        requestedPartNumber: String(part_number),
+        sourceInventoryLocation: "ONT",
+
+        availability: stockAvailable
+          ? "NBD"
+          : "UNAVAILABLE",
+
+        substituteFlag: item.substituteFlag,
+        failureReason,
+
+        returnedPartNumber:
+          item.returnedPartNumber,
+
+        locationStatus: "OPEN",
+        distanceMiles: "703",
+        travelTime: "13.85",
+
+        onHandInventory: String(
+          item.onHandInventory
+        ),
+
+        masterMaterial: String(part_number),
+        region: "GBX-DC",
+        replenishmentMin: "13",
+        replenishmentMax: "14",
+
+        totalChainOnHand: String(
+          totalChainOnHand
+        ),
+
+        echelon: stockAvailable
+          ? "Next Day Downgrade - US DC"
+          : "Inventory Unavailable",
+
+        meetsGoal: stockAvailable
+          ? "Y"
+          : "N",
+
+        chain: item.chain,
+
+        materialDescription:
+          item.materialDescription,
+
+        materialType:
+          item.materialType,
+
+        siteCountry:
+          String(delivery_country),
+
+        sitePostalCode:
+          String(delivery_postal_code),
+
+        preferredSource: "Y",
+
+        siteLocation:
+          String(delivery_city),
+
+        distanceKilometers: "1130"
+      })
+    );
+
+    // ----------------------------------------
+    // GENERATE TRIGGER INFORMATION
+    // ----------------------------------------
+
+    const generatedAt = new Date()
+      .toISOString()
+      .replace("T", " ")
+      .replace("Z", "+00:00");
+
+    const triggerId = (
+      Date.now().toString(16) +
+      Math.random()
+        .toString(16)
+        .substring(2)
+    )
+      .substring(0, 24)
+      .padEnd(24, "0");
+
+    // ----------------------------------------
+    // FINAL DSL RESPONSE
+    // ----------------------------------------
+
+    const response = {
+      Result: {
+        Success:
+          "Trigger/s initiated successfully",
+
+        DSLResponse: {
+          "@xmlns:ns2":
+            "http://webservice.dsl.prophet.bybaxter.com/",
+
+          dslResponseHeader: {
+            orderHeaderId:
+              String(order_number)
+          },
+
+          dslResponseLineItemList: {
+            dslResponseLineItem
+          }
+        },
+
+        triggers: [
+          {
+            generated_at: generatedAt,
+            processed: false,
+            message_id: null,
+
+            trigger: {
+              order_number:
+                String(order_number),
+
+              line_number:
+                Number(line_number),
+
+              actual_time:
+                String(actual_time),
+
+              stock_available:
+                stockAvailable
+            },
+
+            _id: triggerId
+          }
+        ]
+      }
+    };
+
+    console.log("========== MOCK DSL ==========");
+    console.log(
+      "Authenticated User:",
+      user.username
+    );
+    console.log("Requested Quantity:", requestedQuantity);
+    console.log("Available Quantity:", totalChainOnHand);
+    console.log("Stock Available:", stockAvailable);
+    console.log(
+      JSON.stringify(response, null, 2)
+    );
+    console.log("==============================");
+
+    return res.status(200).json(response);
+  } catch (error) {
+    console.error("DSL processing error:", error);
+
+    return res.status(500).json({
+      Result: {
+        Success: "Trigger initiation failed",
+        Error: error.message
+      }
+    });
+  }
 });
-
 // ========================================
 // LOGOUT UPDATED METHOD
 // ========================================
