@@ -1418,7 +1418,7 @@ app.post("/mock/dsl", (req, res) => {
 
         DSLResponse: {
           "@xmlns:ns2":
-            "http://webservice.dsl.prophet.bybaxter.com/",
+            "https://mock-auth-api.onrender.com/mock/dsl",
 
           dslResponseHeader: {
             orderHeaderId:
