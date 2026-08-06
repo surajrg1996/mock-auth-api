@@ -1125,72 +1125,236 @@ app.post("/public/profile", (req, res) => {
 // ========================================
 
 app.post("/mock/dsl", (req, res) => {
+  // ----------------------------------------
+  // BASIC AUTHENTICATION
+  // ----------------------------------------
+
   const credentials = basicAuth(req);
 
   if (!credentials) {
     return res.status(401).json({
-      error: "Authorization header missing"
+      Result: {
+        Success: "Trigger initiation failed",
+        Error: "Authorization header missing"
+      }
     });
   }
 
   const user = users.find(
-    u =>
-      u.username === credentials.name &&
-      u.password === credentials.pass
+    user =>
+      user.username === credentials.name &&
+      user.password === credentials.pass
   );
 
   if (!user) {
     return res.status(401).json({
-      error: "Invalid username/password"
+      Result: {
+        Success: "Trigger initiation failed",
+        Error: "Invalid username/password"
+      }
     });
   }
 
   try {
-    /*
-     * Values sent by Lynx are available here.
-     *
-     * Expected request:
-     * {
-     *   "dsl_flag": "Y",
-     *   "order_number": "06082601",
-     *   "delivery_country": "United States",
-     *   "delivery_postal_code": "40219",
-     *   "line_number": "1",
-     *   "order_qty": "15",
-     *   "actual_time": "2026-08-06 07:20:09+00:00",
-     *   "flow_type": "ORDER_CREATE",
-     *   "order_type": "STANDARD",
-     *   "current_state": "NEW",
-     *   "priority": "HIGH",
-     *   "part_number": "X0800",
-     *   "tenant": "TENANT-01",
-     *   "delivery_state": "Kentucky",
-     *   "delivery_city": "Louisville",
-     *   "autoprocess": "true"
-     * }
-     */
+    // ----------------------------------------
+    // PARSE REQUEST BODY
+    // ----------------------------------------
 
-    const {
-      dsl_flag,
-      order_number,
-      delivery_country,
-      delivery_postal_code,
-      line_number,
-      order_qty,
-      actual_time,
-      flow_type,
-      order_type,
-      current_state,
-      priority,
-      part_number,
-      tenant,
-      delivery_state,
-      delivery_city,
-      autoprocess
-    } = req.body;
+    let incomingPayload = req.body;
+
+    /*
+     * Handles a request sent as an escaped JSON string:
+     *
+     * "{\"message\":{\"order_number\":\"123\"}}"
+     */
+    if (typeof incomingPayload === "string") {
+      try {
+        incomingPayload = JSON.parse(incomingPayload);
+      } catch {
+        return res.status(400).json({
+          Result: {
+            Success: "Trigger initiation failed",
+            Error: "Request body is not valid JSON"
+          }
+        });
+      }
+    }
+
+    if (
+      !incomingPayload ||
+      typeof incomingPayload !== "object"
+    ) {
+      return res.status(400).json({
+        Result: {
+          Success: "Trigger initiation failed",
+          Error: "Request body must be a JSON object"
+        }
+      });
+    }
+
+    /*
+     * Lynx sends business fields inside "message".
+     * This also supports flat request bodies.
+     */
+    const lynxMessage =
+      incomingPayload.message || incomingPayload;
 
     // ----------------------------------------
-    // VALIDATE REQUIRED VALUES
+    // HELPER FUNCTIONS
+    // ----------------------------------------
+
+    function extractDate(value) {
+      /*
+       * Handles MongoDB Extended JSON:
+       *
+       * {
+       *   "$date": "2026-08-06T15:23:02.728Z"
+       * }
+       */
+      if (
+        value &&
+        typeof value === "object" &&
+        value.$date
+      ) {
+        return value.$date;
+      }
+
+      return value;
+    }
+
+    function extractObjectId(value) {
+      /*
+       * Handles MongoDB Extended JSON:
+       *
+       * {
+       *   "$oid": "6a74a6dadd9ad1f816eb9415"
+       * }
+       */
+      if (
+        value &&
+        typeof value === "object" &&
+        value.$oid
+      ) {
+        return value.$oid;
+      }
+
+      return value || null;
+    }
+
+    function convertToBoolean(value) {
+      if (typeof value === "boolean") {
+        return value;
+      }
+
+      return ["true", "1", "yes", "y"].includes(
+        String(value).toLowerCase()
+      );
+    }
+
+    function createObjectId() {
+      return (
+        Date.now().toString(16) +
+        Math.random()
+          .toString(16)
+          .substring(2)
+      )
+        .substring(0, 24)
+        .padEnd(24, "0");
+    }
+
+    function formatDate(date) {
+      return date
+        .toISOString()
+        .replace("T", " ")
+        .replace("Z", "+00:00");
+    }
+
+    // ----------------------------------------
+    // NORMALIZE LYNX REQUEST FIELDS
+    // ----------------------------------------
+
+    const dsl_flag =
+      lynxMessage.dsl_flag;
+
+    const order_number =
+      lynxMessage.order_number;
+
+    const delivery_country =
+      lynxMessage.delivery_country ||
+      lynxMessage.country;
+
+    const delivery_postal_code =
+      lynxMessage.delivery_postal_code ||
+      lynxMessage.postal;
+
+    const line_number =
+      lynxMessage.line_number;
+
+    const order_qty =
+      lynxMessage.order_qty ||
+      lynxMessage.quantity;
+
+    const actual_time = extractDate(
+      lynxMessage.actual_time
+    );
+
+    const flow_type =
+      lynxMessage.flow_type;
+
+    const order_type =
+      lynxMessage.order_type ||
+      lynxMessage.avnet_order_type;
+
+    const current_state =
+      lynxMessage.current_state;
+
+    const priority =
+      lynxMessage.priority;
+
+    const part_number =
+      lynxMessage.part_number;
+
+    const tenant =
+      lynxMessage.tenant;
+
+    /*
+     * delivery_state is not present in the sample
+     * Lynx message, so use N/A when it is missing.
+     */
+    const delivery_state =
+      lynxMessage.delivery_state ||
+      lynxMessage.state ||
+      "N/A";
+
+    const delivery_city =
+      lynxMessage.delivery_city ||
+      lynxMessage.city;
+
+    const autoprocess = convertToBoolean(
+      incomingPayload.autoprocess ??
+      lynxMessage.autoprocess ??
+      false
+    );
+
+    const prioritize = convertToBoolean(
+      incomingPayload.prioritize ??
+      lynxMessage.prioritize ??
+      false
+    );
+
+    const rstx_message_id = extractObjectId(
+      incomingPayload.rstx_message_id
+    );
+
+    const rstx_timestamp = extractDate(
+      incomingPayload.rstx_timestamp
+    );
+
+    const rstx_messtype =
+      incomingPayload.rstx_messtype || null;
+
+    // ----------------------------------------
+    // VALIDATE REQUIRED FIELDS
     // ----------------------------------------
 
     const requiredFields = {
@@ -1207,12 +1371,12 @@ app.post("/mock/dsl", (req, res) => {
       priority,
       part_number,
       tenant,
-      delivery_state,
-      delivery_city,
-      autoprocess
+      delivery_city
     };
 
-    const missingFields = Object.entries(requiredFields)
+    const missingFields = Object.entries(
+      requiredFields
+    )
       .filter(
         ([, value]) =>
           value === undefined ||
@@ -1240,7 +1404,8 @@ app.post("/mock/dsl", (req, res) => {
       return res.status(400).json({
         Result: {
           Success: "Trigger initiation failed",
-          Error: "order_qty must be a positive integer"
+          Error:
+            "quantity must be a positive integer"
         }
       });
     }
@@ -1278,34 +1443,39 @@ app.post("/mock/dsl", (req, res) => {
         materialType: "Interchangeable"
       },
       {
-        // Master item uses the part number received from Lynx.
-        returnedPartNumber: String(part_number),
+        /*
+         * Master part comes from the Lynx request.
+         */
+        returnedPartNumber:
+          String(part_number),
+
         onHandInventory: 3,
         substituteFlag: "N",
         chain: "Master",
         materialDescription:
-          "TOWER ASSY,CONTROLLER, ROHS,1.6.0",
+          "Requested master material",
         materialType: "Not Replaced"
       }
     ];
 
     /*
-     * dsl_flag = Y:
-     * Return master and substitute parts.
+     * If dsl_flag is explicitly N, return only the
+     * requested master part.
      *
-     * dsl_flag = N:
-     * Return only the requested/master part.
+     * For values such as "LynX Order Creation",
+     * return master and alternate parts.
      */
+    const includeSubstitutes =
+      String(dsl_flag).toUpperCase() !== "N";
 
-    const inventory =
-      String(dsl_flag).toUpperCase() === "Y"
-        ? dummyInventory
-        : dummyInventory.filter(
-            item => item.chain === "Master"
-          );
+    const inventory = includeSubstitutes
+      ? dummyInventory
+      : dummyInventory.filter(
+          item => item.chain === "Master"
+        );
 
     // ----------------------------------------
-    // QUANTITY-BASED AVAILABILITY
+    // QUANTITY AVAILABILITY
     // ----------------------------------------
 
     const totalChainOnHand = inventory.reduce(
@@ -1322,20 +1492,26 @@ app.post("/mock/dsl", (req, res) => {
       : `Requested quantity ${requestedQuantity} exceeds available quantity ${totalChainOnHand}`;
 
     // ----------------------------------------
-    // CREATE DSL LINE ITEMS
+    // CREATE DSL RESPONSE LINE ITEMS
     // ----------------------------------------
 
     const dslResponseLineItem = inventory.map(
       item => ({
-        orderLineItemId: String(line_number),
-        requestedPartNumber: String(part_number),
+        orderLineItemId:
+          String(line_number),
+
+        requestedPartNumber:
+          String(part_number),
+
         sourceInventoryLocation: "ONT",
 
         availability: stockAvailable
-          ? "NBD"
+          ? String(order_type)
           : "UNAVAILABLE",
 
-        substituteFlag: item.substituteFlag,
+        substituteFlag:
+          item.substituteFlag,
+
         failureReason,
 
         returnedPartNumber:
@@ -1345,18 +1521,18 @@ app.post("/mock/dsl", (req, res) => {
         distanceMiles: "703",
         travelTime: "13.85",
 
-        onHandInventory: String(
-          item.onHandInventory
-        ),
+        onHandInventory:
+          String(item.onHandInventory),
 
-        masterMaterial: String(part_number),
+        masterMaterial:
+          String(part_number),
+
         region: "GBX-DC",
         replenishmentMin: "13",
         replenishmentMax: "14",
 
-        totalChainOnHand: String(
-          totalChainOnHand
-        ),
+        totalChainOnHand:
+          String(totalChainOnHand),
 
         echelon: stockAvailable
           ? "Next Day Downgrade - US DC"
@@ -1377,6 +1553,9 @@ app.post("/mock/dsl", (req, res) => {
         siteCountry:
           String(delivery_country),
 
+        siteState:
+          String(delivery_state),
+
         sitePostalCode:
           String(delivery_postal_code),
 
@@ -1390,25 +1569,17 @@ app.post("/mock/dsl", (req, res) => {
     );
 
     // ----------------------------------------
-    // GENERATE TRIGGER INFORMATION
+    // TRIGGER VALUES
     // ----------------------------------------
 
-    const generatedAt = new Date()
-      .toISOString()
-      .replace("T", " ")
-      .replace("Z", "+00:00");
+    const generatedAt =
+      formatDate(new Date());
 
-    const triggerId = (
-      Date.now().toString(16) +
-      Math.random()
-        .toString(16)
-        .substring(2)
-    )
-      .substring(0, 24)
-      .padEnd(24, "0");
+    const triggerId =
+      createObjectId();
 
     // ----------------------------------------
-    // FINAL DSL RESPONSE
+    // FINAL RESPONSE
     // ----------------------------------------
 
     const response = {
@@ -1434,7 +1605,9 @@ app.post("/mock/dsl", (req, res) => {
           {
             generated_at: generatedAt,
             processed: false,
-            message_id: null,
+
+            message_id:
+              rstx_message_id,
 
             trigger: {
               order_number:
@@ -1447,8 +1620,41 @@ app.post("/mock/dsl", (req, res) => {
                 String(actual_time),
 
               stock_available:
-                stockAvailable
+                stockAvailable,
+
+              requested_quantity:
+                requestedQuantity,
+
+              total_available_quantity:
+                totalChainOnHand,
+
+              part_number:
+                String(part_number),
+
+              flow_type:
+                String(flow_type),
+
+              order_type:
+                String(order_type),
+
+              current_state:
+                String(current_state),
+
+              priority:
+                String(priority),
+
+              tenant:
+                String(tenant),
+
+              autoprocess,
+              prioritize
             },
+
+            rstx_timestamp:
+              rstx_timestamp || null,
+
+            rstx_messtype:
+              rstx_messtype,
 
             _id: triggerId
           }
@@ -1456,14 +1662,32 @@ app.post("/mock/dsl", (req, res) => {
       }
     };
 
+    // ----------------------------------------
+    // LOG REQUEST AND RESPONSE
+    // ----------------------------------------
+
     console.log("========== MOCK DSL ==========");
     console.log(
       "Authenticated User:",
       user.username
     );
-    console.log("Requested Quantity:", requestedQuantity);
-    console.log("Available Quantity:", totalChainOnHand);
-    console.log("Stock Available:", stockAvailable);
+    console.log("Incoming payload:");
+    console.log(
+      JSON.stringify(incomingPayload, null, 2)
+    );
+    console.log(
+      "Requested Quantity:",
+      requestedQuantity
+    );
+    console.log(
+      "Available Quantity:",
+      totalChainOnHand
+    );
+    console.log(
+      "Stock Available:",
+      stockAvailable
+    );
+    console.log("DSL response:");
     console.log(
       JSON.stringify(response, null, 2)
     );
@@ -1471,7 +1695,10 @@ app.post("/mock/dsl", (req, res) => {
 
     return res.status(200).json(response);
   } catch (error) {
-    console.error("DSL processing error:", error);
+    console.error(
+      "Mock DSL processing error:",
+      error
+    );
 
     return res.status(500).json({
       Result: {
